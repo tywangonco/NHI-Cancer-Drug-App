@@ -81,34 +81,57 @@ def classify_and_format(raw_data):
     
     # 1. Synonym Mapping
     # Maps keywords -> Standardized Cancer Type
-    SYNONYM_MAPPING = {
-        '直腸癌': '結直腸癌', '結腸癌': '結直腸癌', '大腸癌': '結直腸癌', 
-        '大腸直腸癌': '結直腸癌', '結直腸癌': '結直腸癌',
-        '胃癌': '胃癌', '胃食道接合處': '胃癌',
-        '非小細胞肺癌': '肺癌', '肺癌': '肺癌', '小細胞肺癌': '小細胞肺癌',
+    # 1. Cancer Mapping
+    # Maps keywords -> Standardized Cancer Type
+    CANCER_MAPPING = {
+        # === 肺癌大一統 (全部歸類為 '肺癌') ===
+        '非鱗狀非小細胞肺癌': '肺癌',
+        '非小細胞肺癌': '肺癌',
+        '小細胞肺癌': '肺癌',
+        '鱗狀細胞肺癌': '肺癌',
+        '鱗狀上皮細胞癌': '肺癌', # 肺癌條文中常出現
+        '肺癌': '肺癌',
+        'NSCLC': '肺癌',
+        'SCLC': '肺癌',
+        # === 其他既有的癌別 (保持不變) ===
+        '直腸癌': '結直腸癌',
+        '結腸癌': '結直腸癌',
+        '大腸癌': '結直腸癌',
+        '大腸直腸癌': '結直腸癌',
+        '結直腸癌': '結直腸癌',
+        '胃癌': '胃癌',
+        '胃食道接合處': '胃癌',
         '乳癌': '乳癌',
         '胰臟癌': '胰臟癌', '胰腺癌': '胰臟癌',
         '肝癌': '肝癌', '肝細胞癌': '肝癌',
-        '食道癌': '食道癌',
         '膽道癌': '膽道癌', '膽管癌': '膽道癌',
-        '黑色素瘤': '黑色素瘤',
-        '淋巴瘤': '淋巴瘤',
-        '白血病': '白血病',
-        '泌尿道癌': '泌尿道癌', '尿路上皮癌': '泌尿道癌',
-        '腎細胞癌': '腎細胞癌', '腎癌': '腎細胞癌',
-        '頭頸癌': '頭頸癌', '口腔癌': '頭頸癌', '下咽癌': '頭頸癌', '口咽癌': '頭頸癌',
-        '卵巢癌': '卵巢癌',
         '攝護腺癌': '攝護腺癌', '前列腺癌': '攝護腺癌',
-        '甲狀腺癌': '甲狀腺癌',
-        '腦癌': '腦癌', '膠質母細胞瘤': '腦癌',
-        '骨癌': '骨癌',
-        '軟組織肉瘤': '軟組織肉瘤',
+        '黑色素瘤': '黑色素瘤',
+        '泌尿道上皮癌': '尿路上皮癌', '泌尿道癌': '尿路上皮癌', '尿路上皮癌': '尿路上皮癌',
+        '膀胱癌': '尿路上皮癌',
+        '輸尿管癌': '尿路上皮癌',
+        '腎盂癌': '尿路上皮癌',
+        '頭頸癌': '頭頸癌',
+        '口腔癌': '頭頸癌',
+        '下咽癌': '頭頸癌',
+        '口咽癌': '頭頸癌',
+        '喉癌': '頭頸癌',
+        '卵巢癌': '卵巢癌',
+        '輸卵管癌': '卵巢癌',
+        '腹膜癌': '卵巢癌',
         '子宮頸癌': '子宮頸癌',
         '子宮體癌': '子宮體癌', '子宮內膜癌': '子宮體癌',
-        '膀胱癌': '膀胱癌',
-        '皮膚癌': '皮膚癌', '基底細胞癌': '皮膚癌',
+        '淋巴瘤': '淋巴瘤',
+        '白血病': '白血病',
         '多發性骨髓瘤': '多發性骨髓瘤',
-        '神經母細胞瘤': '神經母細胞瘤'
+        '神經母細胞瘤': '神經母細胞瘤',
+        'GIST': '胃腸道基質瘤',
+        '胃腸道基質瘤': '胃腸道基質瘤',
+        '軟組織肉瘤': '軟組織肉瘤',
+        '甲狀腺癌': '甲狀腺癌',
+        '腎細胞癌': '腎細胞癌', '腎癌': '腎細胞癌',
+        '骨癌': '骨癌',
+        '皮膚癌': '皮膚癌', '基底細胞癌': '皮膚癌'
     }
 
     # Keywords that force a reset to General
@@ -116,8 +139,6 @@ def classify_and_format(raw_data):
 
     # Regex patterns for hierarchy
     # Parent: starts with "> 1." or "> I." or "> A."
-    # We simplified in parse_docx to "> 1.", "> 9.1.", etc.
-    # Note: parse_docx adds "> " to numbering.
     parent_pattern = re.compile(r'^> \d+\.')  # Matches "> 1.", "> 9."
     # Child: starts with "> (1)"
     child_pattern = re.compile(r'^> \(\d+\)') # Matches "> (1)"
@@ -139,7 +160,6 @@ def classify_and_format(raw_data):
                 continue
             
             # 1. Check for Reset Keywords (Global Reset)
-            # If explicit reset keyword found, force General immediately
             is_generic_reset = False
             for rk in reset_keywords:
                 if rk in para:
@@ -147,28 +167,22 @@ def classify_and_format(raw_data):
                     is_generic_reset = True
                     break
             
-            # Determine line type if no generic reset happened
+            # Determine line type
             is_parent = bool(parent_pattern.match(para))
             is_child = bool(child_pattern.match(para))
             
             # Logic Branching
             if is_generic_reset:
-                # Already reset above
                 pass
             
             elif is_child:
-                # CHILD: Inherit context! 
-                # Do NOT scan for keywords. Maintain current_cancer_types.
+                # CHILD: Inherit context
                 pass
             
             else:
                 # PARENT or Normal Text: Scan for keywords
-                # If Parent: We effectively "reset" context before scanning (unless keywords found)
-                # Actually, standard behavior: Scan. If found, update. If not found -> ?
-                # User request: "If parent... attempt to grab. If not grab -> Reset to General."
-                
                 found_types_set = set()
-                for keyword, standard_type in SYNONYM_MAPPING.items():
+                for keyword, standard_type in CANCER_MAPPING.items():
                     if keyword in para:
                         found_types_set.add(standard_type)
                 
