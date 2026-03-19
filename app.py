@@ -1,4 +1,10 @@
 import streamlit as st
+
+st.set_page_config(
+    page_title="癌症用藥助手",
+    page_icon="💊",
+)
+
 import json
 import os
 import converter  # Import the converter module
