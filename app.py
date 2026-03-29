@@ -22,31 +22,9 @@ def load_data():
         return json.load(f)
 
 def main():
-    # Sidebar: File Upload
+    # Sidebar
     st.sidebar.title("🔧 Settings")
     st.sidebar.markdown("[🔗 健保署給付規定下載頁面](https://www.nhi.gov.tw/ch/cp-7593-ad2a9-3397-1.html)")
-    uploaded_file = st.sidebar.file_uploader("📂 上傳最新的給付規定 (DOCX)", type=['docx'])
-    
-    if uploaded_file is not None:
-        temp_path = "temp_regulations.docx"
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        with st.spinner("Processing file..."):
-            # Update Database
-            raw_data = converter.parse_docx(temp_path)
-            final_data = converter.classify_and_format(raw_data)
-            
-            with open('nhi_data.json', 'w', encoding='utf-8') as f:
-                json.dump(final_data, f, ensure_ascii=False, indent=2)
-            
-            # Clean up temp file
-            os.remove(temp_path)
-            
-            # Clear cache and reload
-            st.cache_data.clear()
-            st.sidebar.success("資料庫已更新！ (Database updated!)")
-            st.rerun()
 
     st.title("🏥 Cancer Drug Payment Regulations")
     st.markdown("Select a drug and cancer type to view the specific NHI payment regulations.")
@@ -57,6 +35,46 @@ def main():
     if data is None:
         st.error("Error: `nhi_data.json` not found. Please ensure the data file is in the same directory.")
         st.stop()
+
+    st.header("📢 What's New (最新給付規定)")
+    # Extract entries with latest_date
+    updates = []
+    for item in data:
+        if item.get('latest_date'):
+            dates_parts = item['latest_date'].split('/')
+            if len(dates_parts) == 3:
+                try:
+                    score = int(dates_parts[0]) * 10000 + int(dates_parts[1]) * 100 + int(dates_parts[2])
+                    updates.append((score, item['latest_date'], item['drug_name'], item['cancer_type']))
+                except ValueError:
+                    pass
+    
+    # Sort updates by score descending
+    updates.sort(key=lambda x: x[0], reverse=True)
+    
+    # Filter to only keep the absolute latest batch of updates
+    if updates:
+        max_score = updates[0][0]
+        latest_updates = [u for u in updates if u[0] == max_score]
+    else:
+        latest_updates = []
+    
+    # Get unique updates (by drug and cancer) for the latest batch
+    top_updates = []
+    seen = set()
+    for upd in latest_updates:
+        identifier = f"{upd[2]} - {upd[3]}"
+        if identifier not in seen:
+            seen.add(identifier)
+            top_updates.append(upd)
+                
+    if top_updates:
+        for upd in top_updates:
+            st.markdown(f"- **{upd[1]}**: {upd[2]} ({upd[3]})")
+    else:
+        st.info("尚無更新資訊")
+        
+    st.divider()
 
     # 1. Select Drug Name
     # Extract unique drug names

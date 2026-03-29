@@ -21,6 +21,7 @@ CANCER_MAPPING = {
     '大腸直腸癌': '結直腸癌',
     '結直腸癌': '結直腸癌',
     '胃癌': '胃癌',
+    '胃腺癌': '胃癌',
     '胃食道接合處': '胃癌',
     '乳癌': '乳癌',
     '胰臟癌': '胰臟癌', '胰腺癌': '胰臟癌',
@@ -83,7 +84,8 @@ def parse_docx(file_path):
     
     # State Variables
     current_drug_name = None
-    current_cancer = 'General'
+    current_drug_header_full = ""
+    current_cancer = '通則'
     
     # Buffer: { 'General': [lines], 'Lung Cancer': [lines], ... }
     # Using a list to preserve order of appearance if needed, but dict makes it easier to group.
@@ -103,12 +105,13 @@ def parse_docx(file_path):
         if drug_pattern.match(text):
             # 1. Flush previous drug data
             if current_drug_name:
-                flush_drug_data(parsed_data, current_drug_name, drug_cancer_buckets)
+                flush_drug_data(parsed_data, current_drug_name, drug_cancer_buckets, current_drug_header_full)
             
             # 2. Reset State
             clean_name = re.split(r'[:：]', text)[0].strip()
             current_drug_name = clean_name
-            current_cancer = 'General'
+            current_drug_header_full = text
+            current_cancer = '通則'
             drug_cancer_buckets = {}
             current_visual_prefix = "" 
             continue
@@ -136,7 +139,7 @@ def parse_docx(file_path):
             if found_cancer:
                 current_cancer = found_cancer
             else:
-                current_cancer = 'General' # Reset if no cancer found in Level 1
+                current_cancer = '通則' # Reset if no cancer found in Level 1
 
         # Level 2: Sub Item (e.g., (1), (2))
         # Inherit Cancer Type
@@ -176,41 +179,63 @@ def parse_docx(file_path):
 
     # -- Flush the last drug --
     if current_drug_name:
-        flush_drug_data(parsed_data, current_drug_name, drug_cancer_buckets)
+        flush_drug_data(parsed_data, current_drug_name, drug_cancer_buckets, current_drug_header_full)
 
     return parsed_data
 
-def flush_drug_data(parsed_data, drug_name, buckets):
+def flush_drug_data(parsed_data, drug_name, buckets, full_header=""):
     """
     Helper to finalize a drug's data and append to the list.
-    We ensure 'General' comes first if present.
+    We ensure '通則' comes first if present.
     """
     if not buckets:
         # Fallback if drug header exists but no content
         parsed_data.append({
             "drug_name": drug_name,
-            "cancer_type": "General",
-            "regulation": ""
+            "cancer_type": "通則",
+            "regulation": "",
+            "latest_date": None
         })
         return
 
-    # Sort keys: General first, then others alphabetically or by insertion?
-    # Insertion order is preserved in Python 3.7+, but let's be explicit about General.
+    # Sort keys: 通則 first, then others alphabetically or by insertion?
+    # Insertion order is preserved in Python 3.7+, but let's be explicit about 通則.
     cancer_types = list(buckets.keys())
     
-    # Move General to front if exists
-    if 'General' in cancer_types:
-        cancer_types.remove('General')
-        cancer_types.insert(0, 'General')
+    # Move 通則 to front if exists
+    if '通則' in cancer_types:
+        cancer_types.remove('通則')
+        cancer_types.insert(0, '通則')
     
     for c_type in cancer_types:
         lines = buckets[c_type]
         full_text = "\n\n".join(lines).strip() # Multi-line join
         
+        # Date extraction
+        date_matches = re.findall(r'(\d{2,3})/(\d{1,2})/(\d{1,2})', full_text)
+        if not date_matches:
+            header_dates = re.findall(r'(\d{2,3})/(\d{1,2})/(\d{1,2})', full_header)
+            if len(header_dates) == 1:
+                date_matches = header_dates
+        latest_date = None
+        if date_matches:
+            parsed_dates = []
+            for y, m, d in date_matches:
+                try:
+                    score = int(y) * 10000 + int(m) * 100 + int(d)
+                    clean_date = f"{int(y)}/{int(m)}/{int(d)}"
+                    parsed_dates.append((score, clean_date))
+                except ValueError:
+                    pass
+            if parsed_dates:
+                parsed_dates.sort(key=lambda x: x[0], reverse=True)
+                latest_date = parsed_dates[0][1]
+
         parsed_data.append({
             "drug_name": drug_name,
             "cancer_type": c_type,
-            "regulation": full_text
+            "regulation": full_text,
+            "latest_date": latest_date
         })
 
 def main():
