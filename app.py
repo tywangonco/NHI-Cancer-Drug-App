@@ -1,16 +1,14 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="癌症用藥助手",
+    page_title="癌症用藥助手 (Cancer Drug Assistant)",
     page_icon="💊",
+    layout="wide"
 )
 
 import json
 import os
 import converter  # Import the converter module
-
-# Set page config
-st.set_page_config(page_title="Cancer Drug Assistant", layout="wide")
 
 @st.cache_data
 def load_data():
