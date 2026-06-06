@@ -55,12 +55,18 @@ CANCER_MAPPING = {
     '甲狀腺癌': '甲狀腺癌',
     '腎細胞癌': '腎細胞癌', '腎癌': '腎細胞癌',
     '骨癌': '骨癌',
-    '皮膚癌': '皮膚癌', '基底細胞癌': '皮膚癌'
+    '皮膚癌': '皮膚癌', '基底細胞癌': '皮膚癌',
+    '卡波西氏肉瘤': '卡波西氏肉瘤', '卡波西': '卡波西氏肉瘤',
+    '食道癌': '食道癌', '食道鱗狀細胞癌': '食道癌',
+    '腦瘤': '腦瘤', '神經膠母細胞瘤': '腦瘤', '星狀細胞瘤': '腦瘤', '寡樹突膠質細胞瘤': '腦瘤',
+    '間質細胞瘤': '間質細胞瘤', '肋膜間質': '間質細胞瘤'
 }
 
 def parse_docx(file_path):
     """
-    Parses the DOCX file with strict hierarchical logic.
+    Parses the DOCX file with optimized cancer type detection.
+    Groups each drug's paragraphs by Level 1 rules, scanning the entire rule block (including sub-paragraphs)
+    to resolve the cancer type, fallback to '通則' if no unique cancer name is matched.
     """
     if not os.path.exists(file_path):
         print(f"Error: File '{file_path}' not found.")
@@ -72,117 +78,113 @@ def parse_docx(file_path):
         print(f"Error reading DOCX file: {e}")
         return []
 
-    # === Regex Patterns ===
-    # Drug Header: 9.xx (e.g. 9.1, 9.10)
     drug_pattern = re.compile(r'^9\.\d+')
     
-    # Hierarchy Levels
-    level_1_pattern = re.compile(r'^\d+\.')        # 1., 2.
-    level_2_pattern = re.compile(r'^\(\d+\)')      # (1), (2)
-    level_3_pattern = re.compile(r'^[IVX]+\.')     # I., II.
-    level_4_pattern = re.compile(r'^[ivx]+\.')     # i., ii.
+    level_1_pattern = re.compile(r'^\d+\.')
+    level_2_pattern = re.compile(r'^\(\d+\)')
+    level_3_pattern = re.compile(r'^[IVX]+\.')
+    level_4_pattern = re.compile(r'^[ivx]+\.')
 
     parsed_data = []
     
-    # State Variables
-    current_drug_name = None
-    current_drug_header_full = ""
-    current_cancer = '通則'
+    # Step 1: Segment paragraphs into separate drugs
+    drugs_raw = []
+    current_drug = None
     
-    # Buffer: { 'General': [lines], 'Lung Cancer': [lines], ... }
-    # Using a list to preserve order of appearance if needed, but dict makes it easier to group.
-    # We'll use a dict where keys are cancer types and values are lists of formatted strings.
-    drug_cancer_buckets = {} 
-    
-    # Indentation State (for visual hierarchy)
-    # Stores the prefix string (e.g., "", "> ", ">> ")
-    current_visual_prefix = "" 
-
     for para in doc.paragraphs:
         text = para.text.strip()
         if not text:
             continue
-
-        # -- Check for New Drug Section --
+            
         if drug_pattern.match(text):
-            # 1. Flush previous drug data
-            if current_drug_name:
-                flush_drug_data(parsed_data, current_drug_name, drug_cancer_buckets, current_drug_header_full)
-            
-            # 2. Reset State
-            clean_name = re.split(r'[:：]', text)[0].strip()
-            current_drug_name = clean_name
-            current_drug_header_full = text
-            current_cancer = '通則'
-            drug_cancer_buckets = {}
-            current_visual_prefix = "" 
-            continue
-
-        # -- If we are not inside a drug section yet, skip --
-        if not current_drug_name:
-            continue
-
-        # -- Determine Line Hierarchy & Classification --
-        
-        # Level 1: Main Item (e.g., 1., 2.)
-        # Decision Maker for Cancer Type
-        if level_1_pattern.match(text):
-            # Formatting: Bold, No Indent
-            formatted_text = f"**{text}**"
-            current_visual_prefix = "" 
-            
-            # Logic: Scan for Cancer Type
-            found_cancer = None
-            for keyword, standard_type in CANCER_MAPPING.items():
-                if keyword in text:
-                    found_cancer = standard_type
-                    break # First match wins (or could be improved, but usually sufficient)
-            
-            if found_cancer:
-                current_cancer = found_cancer
-            else:
-                current_cancer = '通則' # Reset if no cancer found in Level 1
-
-        # Level 2: Sub Item (e.g., (1), (2))
-        # Inherit Cancer Type
-        elif level_2_pattern.match(text):
-            current_visual_prefix = "> "
-            formatted_text = f"> {text}"
-            # STRICT: No cancer scanning
-
-        # Level 3: Detail (e.g., I., II.)
-        # Inherit Cancer Type
-        elif level_3_pattern.match(text):
-            current_visual_prefix = ">> "
-            formatted_text = f">> {text}"
-            # STRICT: No cancer scanning
-
-        # Level 4: Micro Detail (e.g., i., ii.)
-        # Inherit Cancer Type
-        elif level_4_pattern.match(text):
-            current_visual_prefix = ">>> "
-            formatted_text = f">>> {text}"
-            # STRICT: No cancer scanning
-
-        # Plain Text (No Numbering)
-        # Inherit Cancer Type AND Visual Prefix
+            if current_drug:
+                drugs_raw.append(current_drug)
+            current_drug = {
+                'header': text,
+                'paragraphs': []
+            }
         else:
-            # Maintain previous indentation
-            if current_visual_prefix:
-                formatted_text = f"{current_visual_prefix}{text}"
-            else:
-                formatted_text = text # No indent if Level 1 follower or top level
-
-        # -- Add to Bucket --
-        if current_cancer not in drug_cancer_buckets:
-            drug_cancer_buckets[current_cancer] = []
+            if current_drug:
+                current_drug['paragraphs'].append(text)
+                
+    if current_drug:
+        drugs_raw.append(current_drug)
         
-        drug_cancer_buckets[current_cancer].append(formatted_text)
-
-    # -- Flush the last drug --
-    if current_drug_name:
-        flush_drug_data(parsed_data, current_drug_name, drug_cancer_buckets, current_drug_header_full)
-
+    # Step 2: Parse rules for each drug
+    for drug in drugs_raw:
+        header_text = drug['header']
+        clean_name = re.split(r'[:：]', header_text)[0].strip()
+        
+        rules = []
+        current_rule = None
+        current_visual_prefix = ""
+        
+        for text in drug['paragraphs']:
+            if level_1_pattern.match(text):
+                formatted_text = f"**{text}**"
+                current_visual_prefix = ""
+                if current_rule:
+                    rules.append(current_rule)
+                current_rule = {
+                    'paragraphs': [formatted_text],
+                    'raw_paragraphs': [text]
+                }
+            elif level_2_pattern.match(text):
+                current_visual_prefix = "> "
+                formatted_text = f"> {text}"
+                if current_rule is None:
+                    current_rule = {'paragraphs': [], 'raw_paragraphs': []}
+                current_rule['paragraphs'].append(formatted_text)
+                current_rule['raw_paragraphs'].append(text)
+            elif level_3_pattern.match(text):
+                current_visual_prefix = ">> "
+                formatted_text = f">> {text}"
+                if current_rule is None:
+                    current_rule = {'paragraphs': [], 'raw_paragraphs': []}
+                current_rule['paragraphs'].append(formatted_text)
+                current_rule['raw_paragraphs'].append(text)
+            elif level_4_pattern.match(text):
+                current_visual_prefix = ">>> "
+                formatted_text = f">>> {text}"
+                if current_rule is None:
+                    current_rule = {'paragraphs': [], 'raw_paragraphs': []}
+                current_rule['paragraphs'].append(formatted_text)
+                current_rule['raw_paragraphs'].append(text)
+            else:
+                if current_visual_prefix:
+                    formatted_text = f"{current_visual_prefix}{text}"
+                else:
+                    formatted_text = text
+                if current_rule is None:
+                    current_rule = {'paragraphs': [], 'raw_paragraphs': []}
+                current_rule['paragraphs'].append(formatted_text)
+                current_rule['raw_paragraphs'].append(text)
+                
+        if current_rule:
+            rules.append(current_rule)
+            
+        # Step 3: Scan each rule block for cancer keywords and assign bucket
+        drug_cancer_buckets = {}
+        for rule in rules:
+            combined_text = "\n".join(rule['raw_paragraphs'])
+            
+            matched_cancers = set()
+            for keyword, standard_type in CANCER_MAPPING.items():
+                if keyword in combined_text:
+                    matched_cancers.add(standard_type)
+                    
+            # Rule classification: Unique match -> standard cancer, otherwise -> '通則'
+            if len(matched_cancers) == 1:
+                rule_cancer = list(matched_cancers)[0]
+            else:
+                rule_cancer = '通則'
+                
+            if rule_cancer not in drug_cancer_buckets:
+                drug_cancer_buckets[rule_cancer] = []
+            drug_cancer_buckets[rule_cancer].extend(rule['paragraphs'])
+            
+        flush_drug_data(parsed_data, clean_name, drug_cancer_buckets, header_text)
+        
     return parsed_data
 
 def flush_drug_data(parsed_data, drug_name, buckets, full_header=""):
