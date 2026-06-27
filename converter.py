@@ -91,11 +91,16 @@ def parse_docx(file_path):
     drugs_raw = []
     current_drug = None
     
+    # Flatten paragraphs by splitting any internal soft newlines
+    flat_paragraphs = []
     for para in doc.paragraphs:
-        text = para.text.strip()
-        if not text:
-            continue
-            
+        lines = para.text.split('\n')
+        for line in lines:
+            line_str = line.strip()
+            if line_str:
+                flat_paragraphs.append(line_str)
+                
+    for text in flat_paragraphs:
         if drug_pattern.match(text):
             if current_drug:
                 drugs_raw.append(current_drug)

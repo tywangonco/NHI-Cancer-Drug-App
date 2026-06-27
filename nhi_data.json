@@ -853,8 +853,8 @@
   },
   {
     "drug_name": "9.63. Lenvatinib(如Lenvima)",
-    "cancer_type": "通則",
-    "regulation": "> (1)需經事前審查核准後使用，每次申請之療程以3個月為限，送審時需檢送影像資料，每3個月評估一次。\n\n> (2)Lenvatinib與sorafenib不得合併使用。(109/8/1)",
+    "cancer_type": "甲狀腺癌",
+    "regulation": "**1.用於放射性碘治療無效之局部晚期或轉移性的進行性(progressive)分化型甲狀腺癌(RAI-RDTC)：**\n\n> (1)需經事前審查核准後使用，每次申請之療程以3個月為限，送審時需檢送影像資料，每3個月評估一次。\n\n> (2)Lenvatinib與sorafenib不得合併使用。(109/8/1)",
     "latest_date": "109/8/1"
   },
   {
