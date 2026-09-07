@@ -1,5 +1,4 @@
-# Use official lightweight Python image
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Set working directory inside the container
 WORKDIR /app
@@ -18,4 +17,5 @@ EXPOSE 8080
 
 # Run the Streamlit application
 # We use shell form to dynamically resolve the PORT environment variable set by Cloud Run.
-CMD ["sh", "-c", "streamlit run app.py --server.port=${PORT:-8080} --server.address=0.0.0.0"]
+CMD ["sh", "-c", "streamlit run app.py --server.port=${PORT:-8080} --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableXsrfProtection=false"]
+
